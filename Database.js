@@ -44,6 +44,54 @@ const DB = {
   },
 
   /**
+   * Memformat nilai sebelum ditulis ke Google Sheets.
+   * Mencegah pemotongan angka nol di awal (leading zero) dan konversi eksponensial (scientific)
+   * untuk semua field numerik (nomor telepon, NIK, nomor rekening, nomor BPJS, PIN, dll).
+   */
+  formatValueForSheet: function(key, val) {
+    if (val === undefined || val === null) return '';
+    if (typeof val === 'boolean') return val;
+
+    const keyLower = String(key || '').trim().toLowerCase();
+    let strVal = String(val).trim();
+    if (strVal === '') return '';
+
+    // Kolom-kolom yang wajib disimpan sebagai teks murni
+    const textNumericKeys = [
+      'nik',
+      'nomor_telepon',
+      'telepon',
+      'telepon_perusahaan',
+      'nomor_rekening',
+      'keterangan_bpjs_kesehatan',
+      'keterangan_bpjs_tenaga_kerja',
+      'edit_token',
+      'admin_pin'
+    ];
+
+    const isExplicitNumericKey = textNumericKeys.includes(keyLower) ||
+                                keyLower.includes('telepon') ||
+                                keyLower.includes('rekening') ||
+                                keyLower.includes('nik') ||
+                                keyLower.includes('bpjs') ||
+                                keyLower.includes('pin');
+
+    // Khusus nomor telepon Indonesia: jika diinput tanpa '0' di depan (misal: 852xxxxxx), kembalikan '0'
+    if (keyLower.includes('telepon') && /^8[1-9]\d{7,11}$/.test(strVal)) {
+      strVal = '0' + strVal;
+    }
+
+    // Jika field numerik atau teks yang diawali '0' diikuti angka (contoh: 0852..., 021..., 0001...)
+    // atau digit murni panjang (>= 8 digit, seperti NIK / No Rekening agar tidak jadi float/scientific),
+    // simpan dengan prefix petik tunggal (') agar Google Sheets selalu menyimpannya sebagai Plain Text murni.
+    if (isExplicitNumericKey || /^0\d+$/.test(strVal) || /^\d{8,}$/.test(strVal)) {
+      return "'" + strVal.replace(/^'+/, '');
+    }
+
+    return strVal;
+  },
+
+  /**
    * Mengonversi seluruh baris sheet menjadi array of object
    * Baris 1 dianggap sebagai header key
    */
@@ -61,10 +109,26 @@ const DB = {
       const obj = { _rowIndex: i + 1 };
       for (let j = 0; j < headers.length; j++) {
         let val = row[j];
+        const key = headers[j];
+
         if (val instanceof Date) {
           val = Utilities.formatDate(val, Session.getScriptTimeZone() || 'Asia/Jakarta', 'yyyy-MM-dd');
+        } else if (typeof val === 'number') {
+          // Pulihkan angka yang terpotong leading zero oleh Google Sheets
+          const strNum = String(val);
+          if (key.includes('telepon') && /^8[1-9]\d{7,11}$/.test(strNum)) {
+            val = '0' + strNum;
+          } else {
+            val = strNum.replace(/\.0+$/, '');
+          }
+        } else if (typeof val === 'string') {
+          val = val.replace(/^'+/, '').trim();
+          if (key.includes('telepon') && /^8[1-9]\d{7,11}$/.test(val)) {
+            val = '0' + val;
+          }
         }
-        obj[headers[j]] = val;
+
+        obj[key] = val;
       }
       result.push(obj);
     }
@@ -94,14 +158,15 @@ const DB = {
     data.id_perusahaan = id;
     if (isNew) {
       data.created_at = now;
-      const rowValues = headers.map(h => data[h] !== undefined ? data[h] : '');
+      const rowValues = headers.map(h => this.formatValueForSheet(h, data[h]));
       sheet.appendRow(rowValues);
     } else {
       const target = rows.find(r => r.id_perusahaan === id);
       if (!target) throw new Error('Data perusahaan tidak ditemukan.');
       const rowValues = headers.map(h => {
         if (h === 'created_at') return target.created_at || now;
-        return data[h] !== undefined ? data[h] : (target[h] || '');
+        const raw = data[h] !== undefined ? data[h] : (target[h] || '');
+        return this.formatValueForSheet(h, raw);
       });
       sheet.getRange(target._rowIndex, 1, 1, headers.length).setValues([rowValues]);
     }
@@ -312,14 +377,15 @@ const DB = {
 
     if (isNew) {
       data.created_at = now;
-      const rowValues = headers.map(h => data[h] !== undefined ? data[h] : '');
+      const rowValues = headers.map(h => this.formatValueForSheet(h, data[h]));
       sheet.appendRow(rowValues);
     } else {
       const target = rows.find(r => r.id_pegawai === id);
       if (!target) throw new Error('Data pegawai tidak ditemukan.');
       const rowValues = headers.map(h => {
         if (h === 'created_at') return target.created_at || now;
-        return data[h] !== undefined ? data[h] : (target[h] || '');
+        const raw = data[h] !== undefined ? data[h] : (target[h] || '');
+        return this.formatValueForSheet(h, raw);
       });
       sheet.getRange(target._rowIndex, 1, 1, headers.length).setValues([rowValues]);
     }
@@ -346,7 +412,7 @@ const DB = {
     target.keterangan_resign = keteranganResign || 'Diarsipkan (Resign)';
     target.is_archived = true;
 
-    const rowValues = headers.map(h => target[h] !== undefined ? target[h] : '');
+    const rowValues = headers.map(h => this.formatValueForSheet(h, target[h]));
     sheet.getRange(target._rowIndex, 1, 1, headers.length).setValues([rowValues]);
 
     return { success: true, message: `Pegawai ${target.nama_lengkap || target.nama_panggilan} berhasil diarsipkan dengan status Resign.` };
@@ -365,7 +431,7 @@ const DB = {
     target.status_bekerja = 'Aktif';
     target.is_archived = false;
 
-    const rowValues = headers.map(h => target[h] !== undefined ? target[h] : '');
+    const rowValues = headers.map(h => this.formatValueForSheet(h, target[h]));
     sheet.getRange(target._rowIndex, 1, 1, headers.length).setValues([rowValues]);
 
     return { success: true, message: `Pegawai ${target.nama_lengkap || target.nama_panggilan} berhasil dipulihkan ke status Aktif.` };
@@ -461,7 +527,7 @@ const DB = {
     merged.last_self_updated_at = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Jakarta', 'yyyy-MM-dd HH:mm:ss');
 
     // Tulis kembali ke baris yang bersangkutan sesuai urutan kolom riil pada sheet
-    const rowValues = sheetHeaders.map(h => merged[h] !== undefined ? merged[h] : '');
+    const rowValues = sheetHeaders.map(h => this.formatValueForSheet(h, merged[h]));
     sheet.getRange(target._rowIndex, 1, 1, sheetHeaders.length).setValues([rowValues]);
 
     return {
@@ -504,17 +570,18 @@ const DB = {
     const sheet = this.getSheet(this.SHEET_NAMES.PENGATURAN);
     const data = sheet.getDataRange().getValues();
     let found = false;
+    const formattedVal = this.formatValueForSheet(key, value);
 
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]).trim() === key) {
-        sheet.getRange(i + 1, 2).setValue(value);
+        sheet.getRange(i + 1, 2).setValue(formattedVal);
         found = true;
         break;
       }
     }
 
     if (!found) {
-      sheet.appendRow([key, value]);
+      sheet.appendRow([key, formattedVal]);
     }
     return true;
   },
@@ -577,12 +644,13 @@ const DB = {
       .setFontColor('#ffffff')
       .setFontWeight('bold');
     sPerusahaan.setFrozenRows(1);
+    sPerusahaan.getRange(2, 4, 500, 1).setNumberFormat('@'); // Format kolom telepon sebagai Plain Text
 
     sPerusahaan.appendRow([
       'COMP-001',
       'PT Nusantara Teknologi Mandiri',
       'info@nusantaratech.id',
-      '021-5551234',
+      "'021-5551234",
       'Jl. Sudirman No. 45, Jakarta Selatan',
       'https://nusantaratech.id',
       '2026-01-01 08:00:00'
@@ -591,7 +659,7 @@ const DB = {
       'COMP-002',
       'CV Solusi Digital Perkasa',
       'kontak@solusidigital.co.id',
-      '022-7778899',
+      "'022-7778899",
       'Jl. Asia Afrika No. 12, Bandung',
       'https://solusidigital.co.id',
       '2026-01-15 09:30:00'
@@ -626,13 +694,36 @@ const DB = {
       .setFontWeight('bold');
     sPegawai.setFrozenRows(1);
 
+    // Pasang Checkbox Data Validation untuk kolom bpjs_kesehatan, bpjs_tenaga_kerja, dan is_archived
+    const bpjsKesCol = empHeaders.indexOf('bpjs_kesehatan') + 1;
+    const bpjsTkCol = empHeaders.indexOf('bpjs_tenaga_kerja') + 1;
+    const isArchivedCol = empHeaders.indexOf('is_archived') + 1;
+    const checkboxRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+    sPegawai.getRange(2, bpjsKesCol, 500, 1).setDataValidation(checkboxRule);
+    sPegawai.getRange(2, bpjsTkCol, 500, 1).setDataValidation(checkboxRule);
+    sPegawai.getRange(2, isArchivedCol, 500, 1).setDataValidation(checkboxRule);
+
+    // Format kolom teks-numerik sebagai Plain Text (@) agar leading zero tidak dipotong oleh Sheets
+    const textNumericCols = ['nik', 'nomor_telepon', 'keterangan_bpjs_kesehatan', 'keterangan_bpjs_tenaga_kerja', 'nomor_rekening', 'edit_token'];
+    textNumericCols.forEach(colName => {
+      const cIdx = empHeaders.indexOf(colName) + 1;
+      if (cIdx > 0) {
+        sPegawai.getRange(2, cIdx, 1000, 1).setNumberFormat('@');
+      }
+    });
+
     const token1 = CompletenessService.generateToken();
     const token2 = CompletenessService.generateToken();
     const token3 = CompletenessService.generateToken();
     const token4 = CompletenessService.generateToken();
 
+    const appendEmpRow = (row) => {
+      const formatted = row.map((val, idx) => this.formatValueForSheet(empHeaders[idx], val));
+      sPegawai.appendRow(formatted);
+    };
+
     // Sample 1: Lengkap 100% Aktif
-    sPegawai.appendRow([
+    appendEmpRow([
       'EMP-1001',
       '3171012304950001',
       'Budi Santoso',
@@ -670,7 +761,7 @@ const DB = {
     ]);
 
     // Sample 2: Belum Lengkap Aktif (Missing Alamat & BPJS TK)
-    sPegawai.appendRow([
+    appendEmpRow([
       'EMP-1002',
       '3273016508980002',
       'Siti Nurhaliza',
@@ -708,7 +799,7 @@ const DB = {
     ]);
 
     // Sample 3: Onboarding Cepat (Hanya Nama Panggilan & No WA)
-    sPegawai.appendRow([
+    appendEmpRow([
       'EMP-1003',
       '',
       '',
@@ -746,7 +837,7 @@ const DB = {
     ]);
 
     // Sample 4: Pegawai Resign / Diarsipkan
-    sPegawai.appendRow([
+    appendEmpRow([
       'EMP-1004',
       '3171098765430005',
       'Rudi Hartono',
@@ -793,8 +884,9 @@ const DB = {
       .setFontColor('#ffffff')
       .setFontWeight('bold');
     sPengaturan.setFrozenRows(1);
+    sPengaturan.getRange(2, 2, 50, 1).setNumberFormat('@'); // Format kolom NILAI sebagai Plain Text
 
-    sPengaturan.appendRow(['ADMIN_PIN', '123456']);
+    sPengaturan.appendRow(['ADMIN_PIN', "'123456"]);
     sPengaturan.appendRow(['APP_NAME', 'Sistem Manajemen Pegawai']);
     sPengaturan.appendRow(['WA_TEMPLATE', 'Halo *{NAMA}*,\n\nKami menginformasikan bahwa data kepegawaian Anda saat ini berstatus *{STATUS}* ({PERSENTASE}%).\n\nField yang masih perlu dilengkapi:\n_{KOLOM_KOSONG}_\n\nMohon dapat melengkapi data melalui tautan resmi berikut:\n{LINK}\n\nTerima kasih!']);
 
@@ -805,6 +897,56 @@ const DB = {
     return {
       success: true,
       message: 'Inisialisasi database berhasil! 4 Sheet (Perusahaan, Jabatan, Pegawai 34 Kolom, Pengaturan) beserta data sample telah dibuat.'
+    };
+  },
+
+  /**
+   * Utilitas perbaikan untuk sheet yang sudah terlanjur memotong angka 0:
+   * Mengatur seluruh kolom numerik ke format Plain Text (@) dan memulihkan leading zero.
+   */
+  repairNumericColumns: function() {
+    const ss = this.getSpreadsheet();
+    const sPegawai = ss.getSheetByName(this.SHEET_NAMES.PEGAWAI);
+    if (sPegawai) {
+      const empHeaders = this.getPegawaiHeaders();
+      const textNumericCols = ['nik', 'nomor_telepon', 'keterangan_bpjs_kesehatan', 'keterangan_bpjs_tenaga_kerja', 'nomor_rekening', 'edit_token'];
+      textNumericCols.forEach(colName => {
+        const cIdx = empHeaders.indexOf(colName) + 1;
+        if (cIdx > 0 && sPegawai.getMaxRows() > 1) {
+          sPegawai.getRange(2, cIdx, sPegawai.getMaxRows() - 1, 1).setNumberFormat('@');
+        }
+      });
+
+      const data = sPegawai.getDataRange().getValues();
+      if (data.length > 1) {
+        for (let i = 1; i < data.length; i++) {
+          for (let j = 0; j < empHeaders.length; j++) {
+            const h = empHeaders[j];
+            let v = data[i][j];
+            if (v !== '' && v !== null && v !== undefined) {
+              const formatted = this.formatValueForSheet(h, v);
+              if (formatted !== v) {
+                sPegawai.getRange(i + 1, j + 1).setValue(formatted);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const sPerusahaan = ss.getSheetByName(this.SHEET_NAMES.PERUSAHAAN);
+    if (sPerusahaan && sPerusahaan.getMaxRows() > 1) {
+      sPerusahaan.getRange(2, 4, sPerusahaan.getMaxRows() - 1, 1).setNumberFormat('@');
+    }
+
+    const sPengaturan = ss.getSheetByName(this.SHEET_NAMES.PENGATURAN);
+    if (sPengaturan && sPengaturan.getMaxRows() > 1) {
+      sPengaturan.getRange(2, 2, sPengaturan.getMaxRows() - 1, 1).setNumberFormat('@');
+    }
+
+    return {
+      success: true,
+      message: 'Perbaikan selesai! Seluruh kolom numerik telah diformat Plain Text (@) dan angka nol di awal berhasil dipulihkan.'
     };
   }
 };

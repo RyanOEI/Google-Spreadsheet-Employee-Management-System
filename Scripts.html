@@ -657,11 +657,16 @@
     btn.disabled = true;
     btn.innerText = 'Menyimpan...';
 
+    let telpVal = document.getElementById('p_telepon').value.trim();
+    if (/^8[1-9]\d{7,11}$/.test(telpVal)) {
+      telpVal = '0' + telpVal;
+    }
+
     const data = {
       id_perusahaan: document.getElementById('p_id_perusahaan').value,
       nama_perusahaan: document.getElementById('p_nama_perusahaan').value.trim(),
       email: document.getElementById('p_email').value.trim(),
-      telepon: document.getElementById('p_telepon').value.trim(),
+      telepon: telpVal,
       alamat: document.getElementById('p_alamat').value.trim(),
       website: document.getElementById('p_website').value.trim()
     };
@@ -825,6 +830,11 @@
     btn.disabled = true;
     btn.innerHTML = '<span>Menyimpan...</span>';
 
+    let phoneVal = document.getElementById('emp_nomor_telepon').value.trim();
+    if (/^8[1-9]\d{7,11}$/.test(phoneVal)) {
+      phoneVal = '0' + phoneVal;
+    }
+
     const data = {
       id_pegawai: document.getElementById('emp_id_pegawai').value,
       edit_token: document.getElementById('emp_edit_token').value,
@@ -834,7 +844,7 @@
       status_bekerja: document.getElementById('emp_status_bekerja').value,
       tanggal_awal_bekerja: document.getElementById('emp_tanggal_awal_bekerja').value,
       nama_panggilan: document.getElementById('emp_nama_panggilan').value.trim(),
-      nomor_telepon: document.getElementById('emp_nomor_telepon').value.trim(),
+      nomor_telepon: phoneVal,
       nama_lengkap: document.getElementById('emp_nama_lengkap').value.trim(),
       nik: document.getElementById('emp_nik').value.trim(),
       email: document.getElementById('emp_email').value.trim(),

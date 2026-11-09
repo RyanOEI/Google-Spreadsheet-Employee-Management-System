@@ -65,6 +65,9 @@ Skrip telah dilengkapi generator otomatis:
    - 👥 Sheet `Pegawai` (termasuk kolom BPJS, Rekening Bank `nama_bank` & `nomor_rekening`, serta kolom arsip `keterangan_resign` & `is_archived`)
    - ⚙️ Sheet `Pengaturan` (PIN Admin default: `123456`)
 
+> **Tips Perbaikan Kolom Numerik (Leading Zero):**
+> Jika pada spreadsheet yang sudah ada sebelumnya nomor telepon atau NIK terpotong angka nolnya (misal menjadi `852...`), Anda cukup memilih fungsi **`repairNumericColumns`** di toolbar Apps Script lalu klik **Run (Jalankan)**. Seluruh kolom numerik akan otomatis diformat menjadi Plain Text (`@`) dan angka 0 di awal akan dipulihkan.
+
 ---
 
 ## Langkah 5: Deploy Menjadi Web App

@@ -314,6 +314,11 @@ Setiap kali Anda mengubah kode di Apps Script Editor, jangan lupa untuk membuat 
 - Klik **Deploy** &rarr; **Manage deployments (Kelola penerapan)**.
 - Klik ikon pensil ✏️ &rarr; Pada dropdown *Version*, pilih **New version (Versi baru)** &rarr; Klik **Deploy**.
 
+### 5. Angka Nol di Awal (Leading Zero) Terpotong di Spreadsheet
+Secara default, Google Sheets memperlakukan input angka seperti `0852...` sebagai integer sehingga angka `0` terpotong menjadi `852...`. Sistem aplikasi ini telah dilengkapi proteksi otomatis:
+- Semua kolom teks-numerik (Nomor Telepon, NIK 16 digit, Nomor Rekening, Nomor BPJS, dan PIN) otomatis disimpan dengan prefix petik tunggal (`'`) dan format Plain Text (`@`).
+- Jika Anda memiliki data lama yang angka nolnya sudah terlanjur hilang di Google Sheets, buka Apps Script Editor &rarr; pilih fungsi **`repairNumericColumns`** pada dropdown toolbar &rarr; klik **Run (Jalankan)**. Seluruh kolom numerik akan langsung diperbaiki dan angka nol di awal akan dipulihkan secara otomatis.
+
 ---
 
 ## 📄 Lisensi & Kontribusi

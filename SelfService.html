@@ -400,13 +400,18 @@
       const activeToken = String((tokenEl && tokenEl.value) ? tokenEl.value : (TOKEN || (pegawaiData && pegawaiData.edit_token) || '')).trim().replace(/^["']+|["']+$/g, '');
       const idPegawai = String((document.getElementById('f_id_pegawai') ? document.getElementById('f_id_pegawai').value : (pegawaiData && pegawaiData.id_pegawai) || '')).trim();
 
+      let phoneVal = document.getElementById('f_nomor_telepon').value.trim();
+      if (/^8[1-9]\d{7,11}$/.test(phoneVal)) {
+        phoneVal = '0' + phoneVal;
+      }
+
       const data = {
         id_pegawai: idPegawai,
         edit_token: activeToken,
         nik: document.getElementById('f_nik').value.trim(),
         nama_lengkap: document.getElementById('f_nama_lengkap').value.trim(),
         nama_panggilan: document.getElementById('f_nama_panggilan').value.trim(),
-        nomor_telepon: document.getElementById('f_nomor_telepon').value.trim(),
+        nomor_telepon: phoneVal,
         email: document.getElementById('f_email').value.trim(),
         alamat_domisili: document.getElementById('f_alamat_domisili').value.trim(),
         tempat_lahir: document.getElementById('f_tempat_lahir').value.trim(),

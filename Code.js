@@ -13,6 +13,10 @@ function initDatabase() {
   return DB.initDatabase();
 }
 
+function repairNumericColumns() {
+  return DB.repairNumericColumns();
+}
+
 /**
  * HTTP GET Router
  * Membedakan akses berdasarkan parameter `token`:
@@ -179,6 +183,13 @@ function apiGetPerusahaan() {
 
 function apiSavePerusahaan(data) {
   try {
+    if (data && data.telepon) {
+      let telp = String(data.telepon).trim().replace(/^'+/, '');
+      if (/^8[1-9]\d{7,11}$/.test(telp)) {
+        telp = '0' + telp;
+      }
+      data.telepon = telp;
+    }
     const result = DB.savePerusahaan(data);
     return { success: true, data: result };
   } catch (e) {
@@ -248,6 +259,18 @@ function apiSavePegawai(data) {
       throw new Error('Penempatan Perusahaan dan Jabatan wajib dipilih.');
     }
 
+    // Normalisasi field numerik/teks (pastikan leading zero tidak hilang)
+    let telp = String(data.nomor_telepon || '').trim().replace(/^'+/, '');
+    if (/^8[1-9]\d{7,11}$/.test(telp)) {
+      telp = '0' + telp;
+    }
+    data.nomor_telepon = telp;
+
+    if (data.nik) data.nik = String(data.nik).trim().replace(/^'+/, '');
+    if (data.nomor_rekening) data.nomor_rekening = String(data.nomor_rekening).trim().replace(/^'+/, '');
+    if (data.keterangan_bpjs_kesehatan) data.keterangan_bpjs_kesehatan = String(data.keterangan_bpjs_kesehatan).trim().replace(/^'+/, '');
+    if (data.keterangan_bpjs_tenaga_kerja) data.keterangan_bpjs_tenaga_kerja = String(data.keterangan_bpjs_tenaga_kerja).trim().replace(/^'+/, '');
+
     const result = DB.savePegawai(data);
     return { success: true, data: result };
   } catch (e) {
@@ -293,6 +316,8 @@ function apiGetWhatsAppLink(empId) {
     let phone = String(emp.nomor_telepon || '').replace(/\D/g, '');
     if (phone.startsWith('0')) {
       phone = '62' + phone.substring(1);
+    } else if (phone.startsWith('8')) {
+      phone = '62' + phone;
     }
 
     const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
@@ -323,6 +348,18 @@ function apiSubmitSelfService(token, formData) {
     if (!token && !(formData && formData.id_pegawai)) {
       throw new Error('Token tidak valid.');
     }
+
+    // Normalisasi field numerik/teks
+    if (formData && formData.nomor_telepon) {
+      let telp = String(formData.nomor_telepon).trim().replace(/^'+/, '');
+      if (/^8[1-9]\d{7,11}$/.test(telp)) {
+        telp = '0' + telp;
+      }
+      formData.nomor_telepon = telp;
+    }
+    if (formData && formData.nik) formData.nik = String(formData.nik).trim().replace(/^'+/, '');
+    if (formData && formData.nomor_rekening) formData.nomor_rekening = String(formData.nomor_rekening).trim().replace(/^'+/, '');
+
     const result = DB.updatePegawaiByToken(token, formData);
     return result;
   } catch (e) {
