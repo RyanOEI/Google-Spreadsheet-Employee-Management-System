@@ -1,0 +1,985 @@
+<!-- Scripts.html -->
+<script>
+  // Global Application State
+  const AppState = {
+    dashboard: null,
+    perusahaan: [],
+    jabatan: [],
+    pegawai: [],
+    activeTab: 'dashboard',
+    pegawaiFilter: 'all', // 'all' (aktif), 'incomplete', 'complete', 'archived'
+    searchQuery: '',
+    selectedCompanyId: '',
+    selectedJabatanId: ''
+  };
+
+  // ==========================================
+  // INITIALIZATION & PIN AUTHENTICATION
+  // ==========================================
+  document.addEventListener('DOMContentLoaded', function() {
+    checkPinAuth();
+  });
+
+  function checkPinAuth() {
+    const isAuthed = sessionStorage.getItem('ADMIN_PIN_AUTH');
+    const overlay = document.getElementById('pinOverlay');
+    if (isAuthed === 'true') {
+      overlay.classList.add('hidden');
+      loadAllData();
+    } else {
+      overlay.classList.remove('hidden');
+      setTimeout(() => document.getElementById('inputPin').focus(), 150);
+    }
+  }
+
+  function handlePinSubmit(e) {
+    e.preventDefault();
+    const pinInput = document.getElementById('inputPin');
+    const pin = pinInput.value.trim();
+    const btn = document.getElementById('btnSubmitPin');
+    const errEl = document.getElementById('pinError');
+
+    if (!pin) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span>Memverifikasi...</span>';
+    errEl.classList.add('hidden');
+
+    google.script.run
+      .withSuccessHandler(function(response) {
+        btn.disabled = false;
+        btn.innerHTML = `<span>Masuk Dashboard</span><svg class="w-4 h-4 ml-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>`;
+        
+        if (response && response.success) {
+          sessionStorage.setItem('ADMIN_PIN_AUTH', 'true');
+          document.getElementById('pinOverlay').classList.add('hidden');
+          pinInput.value = '';
+          showToast('Selamat datang di Sistem Manajemen Pegawai', 'success');
+          loadAllData();
+        } else {
+          errEl.innerText = (response && response.message) || 'PIN salah. Silakan coba lagi.';
+          errEl.classList.remove('hidden');
+          pinInput.select();
+        }
+      })
+      .withFailureHandler(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>Masuk Dashboard</span>';
+        errEl.innerText = 'Terjadi kesalahan sistem: ' + err.toString();
+        errEl.classList.remove('hidden');
+      })
+      .apiVerifyAdminPin(pin);
+  }
+
+  function logoutAdmin() {
+    if (confirm('Kunci sesi admin dan kembali ke layar PIN?')) {
+      sessionStorage.removeItem('ADMIN_PIN_AUTH');
+      document.getElementById('pinOverlay').classList.remove('hidden');
+      document.getElementById('inputPin').value = '';
+      setTimeout(() => document.getElementById('inputPin').focus(), 100);
+    }
+  }
+
+  // ==========================================
+  // NAVIGATION & TAB SWITCHER
+  // ==========================================
+  function switchTab(tabName, subFilter) {
+    AppState.activeTab = tabName;
+
+    ['dashboard', 'pegawai', 'perusahaan', 'jabatan', 'pengaturan'].forEach(name => {
+      const el = document.getElementById('view-' + name);
+      const nav = document.getElementById('nav-' + name);
+      if (el) el.classList.add('hidden');
+      if (nav) {
+        nav.classList.remove('bg-brand-50', 'text-brand-700', 'font-semibold');
+        nav.classList.add('text-slate-600');
+      }
+    });
+
+    const activeView = document.getElementById('view-' + tabName);
+    const activeNav = document.getElementById('nav-' + tabName);
+    if (activeView) activeView.classList.remove('hidden');
+    if (activeNav) {
+      activeNav.classList.add('bg-brand-50', 'text-brand-700', 'font-semibold');
+      activeNav.classList.remove('text-slate-600');
+    }
+
+    if (subFilter && tabName === 'pegawai') {
+      setPegawaiFilter(subFilter);
+    }
+
+    const sidebar = document.getElementById('sidebar');
+    if (window.innerWidth < 1024 && !sidebar.classList.contains('hidden')) {
+      sidebar.classList.add('hidden');
+    }
+  }
+
+  function toggleMobileSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('hidden');
+  }
+
+  // ==========================================
+  // DATA FETCHING & SYNCHRONIZATION
+  // ==========================================
+  function loadAllData() {
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res && res.success) {
+          AppState.dashboard = res.data;
+          renderDashboard();
+        }
+      })
+      .apiGetDashboard();
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res && res.success) {
+          AppState.perusahaan = res.data || [];
+          renderPerusahaan();
+          populateCompanyDropdowns();
+        }
+      })
+      .apiGetPerusahaan();
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res && res.success) {
+          AppState.jabatan = res.data || [];
+          renderJabatan();
+          populateJabatanFilter();
+        }
+      })
+      .apiGetJabatan();
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res && res.success) {
+          AppState.pegawai = res.data || [];
+          renderPegawai();
+        }
+      })
+      .apiGetPegawai();
+  }
+
+  function refreshData() {
+    showToast('Memperbarui data dari Google Sheets...', 'info');
+    loadAllData();
+  }
+
+  // ==========================================
+  // RENDER VIEW 1: DASHBOARD
+  // ==========================================
+  function renderDashboard() {
+    const d = AppState.dashboard;
+    if (!d) return;
+
+    document.getElementById('statTotalPegawai').innerText = d.totalPegawai || 0;
+    document.getElementById('statBelumLengkap').innerText = d.pegawaiBelumLengkapCount || 0;
+    document.getElementById('statLengkap').innerText = d.pegawaiLengkap || 0;
+    document.getElementById('statPerusahaan').innerText = d.totalPerusahaan || 0;
+    document.getElementById('statJabatan').innerText = d.totalJabatan || 0;
+
+    const navBadge = document.getElementById('navAlertBadge');
+    const navText = document.getElementById('navAlertText');
+    const sidebarBadge = document.getElementById('badgeIncompleteCount');
+    const dashBadge = document.getElementById('badgeDashboardAlertCount');
+
+    if (d.pegawaiBelumLengkapCount > 0) {
+      navBadge.classList.remove('hidden');
+      navText.innerText = `${d.pegawaiBelumLengkapCount} Perlu Tindakan`;
+      sidebarBadge.classList.remove('hidden');
+      sidebarBadge.innerText = d.pegawaiBelumLengkapCount;
+      dashBadge.innerText = `${d.pegawaiBelumLengkapCount} Pegawai`;
+    } else {
+      navBadge.classList.add('hidden');
+      sidebarBadge.classList.add('hidden');
+      dashBadge.innerText = `0 Pegawai (Semua Lengkap)`;
+    }
+
+    const tbody = document.getElementById('incompleteTableBody');
+    if (!d.incompleteList || d.incompleteList.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" class="py-12 text-center text-slate-400">
+            <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-2">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <p class="font-semibold text-slate-700">Semua Data Pegawai Aktif Telah Lengkap!</p>
+            <p class="text-xs text-slate-400 mt-1">Tidak ada data pegawai yang memerlukan tindakan saat ini.</p>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = d.incompleteList.map(p => `
+      <tr class="table-row-hover">
+        <td class="py-3.5 px-4 font-semibold text-slate-900">
+          <div>${p.nama_lengkap || p.nama_panggilan}</div>
+          <div class="text-xs text-slate-400 font-normal">${p.nomor_telepon || 'Tanpa No HP'}</div>
+        </td>
+        <td class="py-3.5 px-4 text-xs">
+          <span class="font-medium text-slate-800">${p.nama_jabatan || '-'}</span>
+          <div class="text-slate-400">${p.nama_perusahaan || '-'}</div>
+        </td>
+        <td class="py-3.5 px-4">
+          <div class="flex items-center space-x-2">
+            <span class="text-xs font-bold text-red-600">${p.persentase_kelengkapan}%</span>
+            <div class="w-16 bg-slate-100 h-2 rounded-full overflow-hidden">
+              <div class="bg-red-500 h-full rounded-full" style="width: ${p.persentase_kelengkapan}%;"></div>
+            </div>
+          </div>
+        </td>
+        <td class="py-3.5 px-4 text-xs text-red-600 font-medium max-w-xs">
+          <span class="bg-red-50 text-red-700 px-2 py-0.5 rounded border border-red-100">${p.kolom_belum_lengkap || 'Belum diisi'}</span>
+        </td>
+        <td class="py-3.5 px-4 text-center">
+          <div class="flex items-center justify-center space-x-1">
+            <button onclick="triggerWhatsApp('${p.id_pegawai}')" class="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition" title="Kirim Pesan WhatsApp">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+            </button>
+            <button onclick="copyToClipboard('${p.self_service_url}')" class="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition" title="Salin Tautan Form Mandiri">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            </button>
+            <button onclick="triggerEmail('${p.id_pegawai}')" class="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition" title="Kirim Email Pengingat">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            </button>
+            <button onclick="editPegawaiById('${p.id_pegawai}')" class="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition" title="Edit Pegawai">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // ==========================================
+  // RENDER VIEW 2: DATA PEGAWAI
+  // ==========================================
+  function setPegawaiFilter(filterType) {
+    AppState.pegawaiFilter = filterType;
+    ['all', 'incomplete', 'complete', 'archived'].forEach(f => {
+      const btn = document.getElementById('filter-' + f);
+      if (btn) {
+        if (f === filterType) {
+          if (f === 'archived') {
+            btn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-600 text-white transition';
+          } else {
+            btn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-600 text-white transition';
+          }
+        } else {
+          btn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition';
+        }
+      }
+    });
+    applyPegawaiFilters();
+  }
+
+  function applyPegawaiFilters() {
+    AppState.searchQuery = document.getElementById('searchPegawai').value.toLowerCase();
+    AppState.selectedCompanyId = document.getElementById('filterCompany').value;
+    AppState.selectedJabatanId = document.getElementById('filterJabatan').value;
+    renderPegawai();
+  }
+
+  function renderPegawai() {
+    const rawList = AppState.pegawai || [];
+
+    // Pisahkan daftar aktif vs diarsipkan
+    const activeList = rawList.filter(p => !p.is_archived && (p.status_bekerja || 'Aktif').toLowerCase() !== 'resign');
+    const archivedList = rawList.filter(p => p.is_archived || (p.status_bekerja || '').toLowerCase() === 'resign');
+
+    // Update Counts pada Tab Filter
+    document.getElementById('count-all').innerText = activeList.length;
+    document.getElementById('count-incomplete').innerText = activeList.filter(p => p.status_kelengkapan === 'BELUM_LENGKAP').length;
+    document.getElementById('count-complete').innerText = activeList.filter(p => p.status_kelengkapan === 'LENGKAP').length;
+    document.getElementById('count-archived').innerText = archivedList.length;
+
+    let displayList = [];
+    const isArchivedTab = AppState.pegawaiFilter === 'archived';
+
+    if (isArchivedTab) {
+      displayList = archivedList;
+    } else if (AppState.pegawaiFilter === 'incomplete') {
+      displayList = activeList.filter(p => p.status_kelengkapan === 'BELUM_LENGKAP');
+    } else if (AppState.pegawaiFilter === 'complete') {
+      displayList = activeList.filter(p => p.status_kelengkapan === 'LENGKAP');
+    } else {
+      displayList = activeList;
+    }
+
+    if (AppState.selectedCompanyId) {
+      displayList = displayList.filter(p => p.id_perusahaan === AppState.selectedCompanyId);
+    }
+    if (AppState.selectedJabatanId) {
+      displayList = displayList.filter(p => p.id_jabatan === AppState.selectedJabatanId);
+    }
+
+    if (AppState.searchQuery) {
+      const q = AppState.searchQuery;
+      displayList = displayList.filter(p => 
+        (p.nama_lengkap || '').toLowerCase().includes(q) ||
+        (p.nama_panggilan || '').toLowerCase().includes(q) ||
+        (p.nik || '').toLowerCase().includes(q) ||
+        (p.nomor_telepon || '').toLowerCase().includes(q) ||
+        (p.nama_bank || '').toLowerCase().includes(q) ||
+        (p.nomor_rekening || '').toLowerCase().includes(q)
+      );
+    }
+
+    const theadRow = document.getElementById('pegawaiTableHeader');
+    if (isArchivedTab) {
+      theadRow.innerHTML = `
+        <th class="py-3 px-4">Pegawai</th>
+        <th class="py-3 px-4">Penempatan</th>
+        <th class="py-3 px-4">Tanggal & Alasan Resign</th>
+        <th class="py-3 px-4">Rekening & BPJS</th>
+        <th class="py-3 px-4">Status</th>
+        <th class="py-3 px-4 text-center">Aksi</th>
+      `;
+    } else {
+      theadRow.innerHTML = `
+        <th class="py-3 px-4">Pegawai</th>
+        <th class="py-3 px-4">Penempatan</th>
+        <th class="py-3 px-4">Rekening & BPJS</th>
+        <th class="py-3 px-4">Kelengkapan Data</th>
+        <th class="py-3 px-4">Status</th>
+        <th class="py-3 px-4 text-center">Aksi & Tautan Mandiri</th>
+      `;
+    }
+
+    const tbody = document.getElementById('pegawaiTableBody');
+    if (displayList.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-slate-400">Tidak ada data pegawai yang sesuai dengan filter.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = displayList.map(p => {
+      const isLengkap = p.status_kelengkapan === 'LENGKAP';
+      const bpjsKesBadge = p.bpjs_kesehatan 
+        ? `<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] font-semibold">✓ BPJS Kes</span>` 
+        : `<span class="bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded text-[10px] font-semibold">✗ BPJS Kes</span>`;
+      
+      const bpjsTkBadge = p.bpjs_tenaga_kerja 
+        ? `<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] font-semibold">✓ BPJS TK</span>` 
+        : `<span class="bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded text-[10px] font-semibold">✗ BPJS TK</span>`;
+
+      const bankBadge = p.nama_bank 
+        ? `<div class="text-[11px] font-semibold text-slate-800 flex items-center space-x-1"><span class="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px]">${p.nama_bank}</span><span>${p.nomor_rekening || '-'}</span></div>`
+        : `<div class="text-[11px] text-slate-400 italic">Rekening belum diisi</div>`;
+
+      if (isArchivedTab) {
+        return `
+          <tr class="table-row-hover bg-slate-50/50">
+            <td class="py-3.5 px-4">
+              <div class="font-bold text-slate-900">${p.nama_lengkap || p.nama_panggilan}</div>
+              <div class="text-xs text-slate-400 font-mono">Panggilan: ${p.nama_panggilan || '-'}</div>
+              <div class="text-xs text-slate-500">${p.nomor_telepon || '-'}</div>
+            </td>
+            <td class="py-3.5 px-4 text-xs">
+              <div class="font-bold text-slate-800">${p.nama_jabatan || '-'}</div>
+              <div class="text-slate-500">${p.nama_perusahaan || '-'}</div>
+            </td>
+            <td class="py-3.5 px-4 text-xs">
+              <div class="font-bold text-amber-900">Resign: ${p.tanggal_resign || '-'}</div>
+              <div class="text-slate-600 bg-amber-50 p-1.5 rounded border border-amber-200 mt-1 max-w-xs text-[11px]">${p.keterangan_resign || 'Tanpa keterangan'}</div>
+            </td>
+            <td class="py-3.5 px-4 text-xs">
+              ${bankBadge}
+              <div class="flex space-x-1 mt-1">${bpjsKesBadge} ${bpjsTkBadge}</div>
+            </td>
+            <td class="py-3.5 px-4 text-xs">
+              <span class="inline-block px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                Resign / Diarsipkan
+              </span>
+            </td>
+            <td class="py-3.5 px-4 text-center">
+              <div class="flex items-center justify-center space-x-2">
+                <button onclick="restorePegawaiById('${p.id_pegawai}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition flex items-center space-x-1 shadow-sm" title="Pulihkan status pegawai ke Aktif">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                  <span>Pulihkan</span>
+                </button>
+                <button onclick="editPegawaiById('${p.id_pegawai}')" class="p-1.5 text-slate-600 hover:bg-slate-200 rounded-lg transition" title="Lihat/Edit Data">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+
+      return `
+        <tr class="table-row-hover">
+          <td class="py-3.5 px-4">
+            <div class="font-bold text-slate-900">${p.nama_lengkap || `<span class="text-brand-600">${p.nama_panggilan}</span>`}</div>
+            <div class="text-xs text-slate-400 font-mono">Panggilan: ${p.nama_panggilan || '-'} &bull; NIK: ${p.nik || '<span class="text-amber-500 font-bold">Belum Ada</span>'}</div>
+            <div class="text-xs text-slate-500">${p.nomor_telepon || '-'}</div>
+          </td>
+          <td class="py-3.5 px-4 text-xs">
+            <div class="font-bold text-slate-800">${p.nama_jabatan || '-'}</div>
+            <div class="text-slate-500">${p.nama_perusahaan || '-'}</div>
+          </td>
+          <td class="py-3.5 px-4 text-xs">
+            ${bankBadge}
+            <div class="flex space-x-1 mt-1.5">
+              ${bpjsKesBadge}
+              ${bpjsTkBadge}
+            </div>
+          </td>
+          <td class="py-3.5 px-4">
+            <div class="flex items-center space-x-2 mb-1">
+              <span class="text-xs font-bold ${isLengkap ? 'text-emerald-600' : 'text-red-600'}">${p.persentase_kelengkapan}%</span>
+              <div class="w-16 bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div class="${isLengkap ? 'bg-emerald-500' : 'bg-red-500'} h-full rounded-full" style="width: ${p.persentase_kelengkapan}%;"></div>
+              </div>
+            </div>
+            ${isLengkap 
+              ? `<span class="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded">LENGKAP</span>` 
+              : `<span class="bg-red-50 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded" title="Kurang: ${p.kolom_belum_lengkap}">Kurang: ${p.kolom_belum_lengkap ? p.kolom_belum_lengkap.split(',').slice(0, 2).join(',') + '...' : '-'}</span>`
+            }
+          </td>
+          <td class="py-3.5 px-4 text-xs">
+            <span class="inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${p.status_bekerja === 'Resign' ? 'bg-slate-200 text-slate-700' : 'bg-blue-50 text-blue-700'}">
+              ${p.status_bekerja || 'Aktif'}
+            </span>
+            <div class="text-[10px] text-slate-400 mt-0.5">${p.status_pegawai || 'Tetap'}</div>
+          </td>
+          <td class="py-3.5 px-4 text-center">
+            <div class="flex items-center justify-center space-x-1">
+              <button onclick="triggerWhatsApp('${p.id_pegawai}')" class="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition" title="Kirim Pesan WhatsApp">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+              </button>
+              <button onclick="copyToClipboard('${p.self_service_url}')" class="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition" title="Salin Tautan Form Mandiri">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+              </button>
+              <button onclick="triggerEmail('${p.id_pegawai}')" class="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition" title="Kirim Email">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              </button>
+              <button onclick="editPegawaiById('${p.id_pegawai}')" class="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition" title="Edit Data">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+              <!-- Tombol Arsip (Pengganti Hapus Data) -->
+              <button onclick="openModalArsip('${p.id_pegawai}')" class="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition" title="Arsipkan Pegawai (Resign)">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // ==========================================
+  // RENDER VIEW 3: DATA PERUSAHAAN
+  // ==========================================
+  function renderPerusahaan() {
+    const list = AppState.perusahaan || [];
+    const tbody = document.getElementById('perusahaanTableBody');
+
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="py-10 text-center text-slate-400">Belum ada data perusahaan. Klik tombol Tambah Perusahaan.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = list.map(c => `
+      <tr class="table-row-hover">
+        <td class="py-3 px-4 text-xs font-mono text-slate-500">${c.id_perusahaan}</td>
+        <td class="py-3 px-4 font-bold text-slate-900">${c.nama_perusahaan}</td>
+        <td class="py-3 px-4 text-xs">
+          <div>${c.email || '-'}</div>
+          <div class="text-slate-400">${c.telepon || '-'}</div>
+        </td>
+        <td class="py-3 px-4 text-xs text-slate-600 max-w-xs truncate">${c.alamat || '-'}</td>
+        <td class="py-3 px-4 text-xs">
+          ${c.website ? `<a href="${c.website}" target="_blank" class="text-brand-600 hover:underline">Kunjungi Web</a>` : '-'}
+        </td>
+        <td class="py-3 px-4 text-center">
+          <div class="flex items-center justify-center space-x-2">
+            <button onclick="editPerusahaanById('${c.id_perusahaan}')" class="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition" title="Edit">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+            <button onclick="deletePerusahaanById('${c.id_perusahaan}')" class="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition" title="Hapus">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // ==========================================
+  // RENDER VIEW 4: DATA JABATAN
+  // ==========================================
+  function renderJabatan() {
+    const list = AppState.jabatan || [];
+    const tbody = document.getElementById('jabatanTableBody');
+
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="py-10 text-center text-slate-400">Belum ada data jabatan. Klik tombol Tambah Jabatan.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = list.map(j => `
+      <tr class="table-row-hover">
+        <td class="py-3 px-4 text-xs font-mono text-slate-500">${j.id_jabatan}</td>
+        <td class="py-3 px-4 font-bold text-slate-900">${j.nama_jabatan}</td>
+        <td class="py-3 px-4 text-xs font-medium text-brand-700">${j.nama_perusahaan || '-'}</td>
+        <td class="py-3 px-4 text-xs text-slate-600">${j.departemen || '-'}</td>
+        <td class="py-3 px-4 text-xs text-slate-500 max-w-xs truncate">${j.keterangan || '-'}</td>
+        <td class="py-3 px-4 text-center">
+          <div class="flex items-center justify-center space-x-2">
+            <button onclick="editJabatanById('${j.id_jabatan}')" class="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition" title="Edit">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+            <button onclick="deleteJabatanById('${j.id_jabatan}')" class="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition" title="Hapus">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // ==========================================
+  // DROPDOWN HELPERS
+  // ==========================================
+  function populateCompanyDropdowns() {
+    const list = AppState.perusahaan || [];
+    const filterComp = document.getElementById('filterCompany');
+    const modalComp = document.getElementById('emp_id_perusahaan');
+    const modalJabComp = document.getElementById('j_id_perusahaan');
+
+    let opts = '<option value="">Semua Perusahaan</option>';
+    let modalOpts = '<option value="">Pilih Perusahaan</option>';
+
+    list.forEach(c => {
+      opts += `<option value="${c.id_perusahaan}">${c.nama_perusahaan}</option>`;
+      modalOpts += `<option value="${c.id_perusahaan}">${c.nama_perusahaan}</option>`;
+    });
+
+    if (filterComp) filterComp.innerHTML = opts;
+    if (modalComp) modalComp.innerHTML = modalOpts;
+    if (modalJabComp) modalJabComp.innerHTML = modalOpts;
+  }
+
+  function populateJabatanFilter() {
+    const list = AppState.jabatan || [];
+    const filterJab = document.getElementById('filterJabatan');
+    let opts = '<option value="">Semua Jabatan</option>';
+    list.forEach(j => {
+      opts += `<option value="${j.id_jabatan}">${j.nama_jabatan} (${j.nama_perusahaan})</option>`;
+    });
+    if (filterJab) filterJab.innerHTML = opts;
+  }
+
+  function handleModalCompanyChange() {
+    const selectedCompId = document.getElementById('emp_id_perusahaan').value;
+    const jabSelect = document.getElementById('emp_id_jabatan');
+    const list = AppState.jabatan || [];
+
+    const filtered = selectedCompId ? list.filter(j => j.id_perusahaan === selectedCompId) : list;
+    let opts = '<option value="">Pilih Jabatan</option>';
+    filtered.forEach(j => {
+      opts += `<option value="${j.id_jabatan}">${j.nama_jabatan}</option>`;
+    });
+    jabSelect.innerHTML = opts;
+  }
+
+  // ==========================================
+  // ACTIONS: WHATSAPP, EMAIL, SALIN LINK
+  // ==========================================
+  function triggerWhatsApp(empId) {
+    showToast('Menyiapkan template WhatsApp...', 'info');
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res && res.success) {
+          window.open(res.url, '_blank');
+        } else {
+          alert('Gagal membuat link WA: ' + ((res && res.message) || 'Error'));
+        }
+      })
+      .apiGetWhatsAppLink(empId);
+  }
+
+  function triggerEmail(empId) {
+    if (!confirm('Kirim email pengingat kelengkapan data ke alamat email pegawai ini?')) return;
+    showToast('Mengirim email...', 'info');
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res && res.success) {
+          showToast(res.message, 'success');
+        } else {
+          showToast(res.message || 'Gagal mengirim email.', 'error');
+        }
+      })
+      .apiSendReminderEmail(empId);
+  }
+
+  function copyToClipboard(text) {
+    if (!text) {
+      showToast('Tautan tidak ditemukan.', 'error');
+      return;
+    }
+    navigator.clipboard.writeText(text).then(function() {
+      showToast('Tautan formulir mandiri disalin ke clipboard!', 'success');
+    }).catch(function(err) {
+      showToast('Gagal menyalin tautan.', 'error');
+    });
+  }
+
+  // ==========================================
+  // MODAL CRUD: PERUSAHAAN
+  // ==========================================
+  function openModalPerusahaan(data) {
+    document.getElementById('modalPerusahaan').classList.remove('hidden');
+    document.getElementById('modalPerusahaanTitle').innerText = data ? 'Edit Perusahaan' : 'Tambah Perusahaan';
+    document.getElementById('p_id_perusahaan').value = data ? data.id_perusahaan : '';
+    document.getElementById('p_nama_perusahaan').value = data ? data.nama_perusahaan : '';
+    document.getElementById('p_email').value = data ? (data.email || '') : '';
+    document.getElementById('p_telepon').value = data ? (data.telepon || '') : '';
+    document.getElementById('p_alamat').value = data ? (data.alamat || '') : '';
+    document.getElementById('p_website').value = data ? (data.website || '') : '';
+  }
+
+  function closeModalPerusahaan() {
+    document.getElementById('modalPerusahaan').classList.add('hidden');
+  }
+
+  function editPerusahaanById(id) {
+    const c = AppState.perusahaan.find(item => item.id_perusahaan === id);
+    if (c) openModalPerusahaan(c);
+  }
+
+  function handleSavePerusahaan(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btnSubmitPerusahaan');
+    btn.disabled = true;
+    btn.innerText = 'Menyimpan...';
+
+    const data = {
+      id_perusahaan: document.getElementById('p_id_perusahaan').value,
+      nama_perusahaan: document.getElementById('p_nama_perusahaan').value.trim(),
+      email: document.getElementById('p_email').value.trim(),
+      telepon: document.getElementById('p_telepon').value.trim(),
+      alamat: document.getElementById('p_alamat').value.trim(),
+      website: document.getElementById('p_website').value.trim()
+    };
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        btn.disabled = false;
+        btn.innerText = 'Simpan';
+        if (res && res.success) {
+          closeModalPerusahaan();
+          showToast('Data perusahaan berhasil disimpan!', 'success');
+          loadAllData();
+        } else {
+          alert('Gagal menyimpan: ' + ((res && res.message) || 'Error'));
+        }
+      })
+      .apiSavePerusahaan(data);
+  }
+
+  function deletePerusahaanById(id) {
+    if (!confirm('Yakin ingin menghapus perusahaan ini?')) return;
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res && res.success) {
+          showToast('Perusahaan berhasil dihapus.', 'success');
+          loadAllData();
+        } else {
+          alert('Gagal menghapus: ' + ((res && res.message) || 'Error'));
+        }
+      })
+      .apiDeletePerusahaan(id);
+  }
+
+  // ==========================================
+  // MODAL CRUD: JABATAN
+  // ==========================================
+  function openModalJabatan(data) {
+    document.getElementById('modalJabatan').classList.remove('hidden');
+    document.getElementById('modalJabatanTitle').innerText = data ? 'Edit Jabatan' : 'Tambah Jabatan';
+    document.getElementById('j_id_jabatan').value = data ? data.id_jabatan : '';
+    document.getElementById('j_id_perusahaan').value = data ? data.id_perusahaan : '';
+    document.getElementById('j_nama_jabatan').value = data ? data.nama_jabatan : '';
+    document.getElementById('j_departemen').value = data ? (data.departemen || '') : '';
+    document.getElementById('j_keterangan').value = data ? (data.keterangan || '') : '';
+  }
+
+  function closeModalJabatan() {
+    document.getElementById('modalJabatan').classList.add('hidden');
+  }
+
+  function editJabatanById(id) {
+    const j = AppState.jabatan.find(item => item.id_jabatan === id);
+    if (j) openModalJabatan(j);
+  }
+
+  function handleSaveJabatan(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btnSubmitJabatan');
+    btn.disabled = true;
+    btn.innerText = 'Menyimpan...';
+
+    const data = {
+      id_jabatan: document.getElementById('j_id_jabatan').value,
+      id_perusahaan: document.getElementById('j_id_perusahaan').value,
+      nama_jabatan: document.getElementById('j_nama_jabatan').value.trim(),
+      departemen: document.getElementById('j_departemen').value.trim(),
+      keterangan: document.getElementById('j_keterangan').value.trim()
+    };
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        btn.disabled = false;
+        btn.innerText = 'Simpan';
+        if (res && res.success) {
+          closeModalJabatan();
+          showToast('Data jabatan berhasil disimpan!', 'success');
+          loadAllData();
+        } else {
+          alert('Gagal menyimpan: ' + ((res && res.message) || 'Error'));
+        }
+      })
+      .apiSaveJabatan(data);
+  }
+
+  function deleteJabatanById(id) {
+    if (!confirm('Yakin ingin menghapus jabatan ini?')) return;
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res && res.success) {
+          showToast('Jabatan berhasil dihapus.', 'success');
+          loadAllData();
+        } else {
+          alert('Gagal menghapus: ' + ((res && res.message) || 'Error'));
+        }
+      })
+      .apiDeleteJabatan(id);
+  }
+
+  // ==========================================
+  // MODAL CRUD: PEGAWAI (FLEKSIBEL)
+  // ==========================================
+  function openModalPegawai(data) {
+    document.getElementById('modalPegawai').classList.remove('hidden');
+    document.getElementById('modalPegawaiTitle').innerText = data ? 'Edit Data Pegawai' : 'Tambah Pegawai Baru';
+
+    document.getElementById('emp_id_pegawai').value = data ? data.id_pegawai : '';
+    document.getElementById('emp_edit_token').value = data ? (data.edit_token || '') : '';
+
+    // Company & Jabatan Cascading
+    document.getElementById('emp_id_perusahaan').value = data ? data.id_perusahaan : '';
+    handleModalCompanyChange();
+    if (data && data.id_jabatan) {
+      document.getElementById('emp_id_jabatan').value = data.id_jabatan;
+    }
+
+    // Status
+    document.getElementById('emp_status_pegawai').value = data ? (data.status_pegawai || 'Tetap') : 'Tetap';
+    document.getElementById('emp_status_bekerja').value = data ? (data.status_bekerja || 'Aktif') : 'Aktif';
+    document.getElementById('emp_tanggal_awal_bekerja').value = data ? (data.tanggal_awal_bekerja || '') : '';
+
+    // Identitas
+    document.getElementById('emp_nama_panggilan').value = data ? (data.nama_panggilan || '') : '';
+    document.getElementById('emp_nomor_telepon').value = data ? (data.nomor_telepon || '') : '';
+    document.getElementById('emp_nama_lengkap').value = data ? (data.nama_lengkap || '') : '';
+    document.getElementById('emp_nik').value = data ? (data.nik || '') : '';
+    document.getElementById('emp_email').value = data ? (data.email || '') : '';
+    document.getElementById('emp_alamat_domisili').value = data ? (data.alamat_domisili || '') : '';
+
+    // Bank
+    document.getElementById('emp_nama_bank').value = data ? (data.nama_bank || '') : '';
+    document.getElementById('emp_nomor_rekening').value = data ? (data.nomor_rekening || '') : '';
+
+    // BPJS
+    document.getElementById('emp_bpjs_kesehatan').checked = data ? !!data.bpjs_kesehatan : false;
+    document.getElementById('emp_keterangan_bpjs_kesehatan').value = data ? (data.keterangan_bpjs_kesehatan || '') : '';
+    document.getElementById('emp_bpjs_tenaga_kerja').checked = data ? !!data.bpjs_tenaga_kerja : false;
+    document.getElementById('emp_keterangan_bpjs_tenaga_kerja').value = data ? (data.keterangan_bpjs_tenaga_kerja || '') : '';
+
+    // Biodata
+    document.getElementById('emp_tempat_lahir').value = data ? (data.tempat_lahir || '') : '';
+    document.getElementById('emp_tanggal_lahir').value = data ? (data.tanggal_lahir || '') : '';
+    document.getElementById('emp_jenis_kelamin').value = data ? (data.jenis_kelamin || '') : '';
+    document.getElementById('emp_agama').value = data ? (data.agama || '') : '';
+    document.getElementById('emp_golongan_darah').value = data ? (data.golongan_darah || '') : '';
+    document.getElementById('emp_pendidikan').value = data ? (data.pendidikan || '') : '';
+    document.getElementById('emp_jurusan').value = data ? (data.jurusan || '') : '';
+  }
+
+  function closeModalPegawai() {
+    document.getElementById('modalPegawai').classList.add('hidden');
+  }
+
+  function editPegawaiById(id) {
+    const p = AppState.pegawai.find(item => item.id_pegawai === id);
+    if (p) openModalPegawai(p);
+  }
+
+  function handleSavePegawai(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btnSubmitPegawai');
+    btn.disabled = true;
+    btn.innerHTML = '<span>Menyimpan...</span>';
+
+    const data = {
+      id_pegawai: document.getElementById('emp_id_pegawai').value,
+      edit_token: document.getElementById('emp_edit_token').value,
+      id_perusahaan: document.getElementById('emp_id_perusahaan').value,
+      id_jabatan: document.getElementById('emp_id_jabatan').value,
+      status_pegawai: document.getElementById('emp_status_pegawai').value,
+      status_bekerja: document.getElementById('emp_status_bekerja').value,
+      tanggal_awal_bekerja: document.getElementById('emp_tanggal_awal_bekerja').value,
+      nama_panggilan: document.getElementById('emp_nama_panggilan').value.trim(),
+      nomor_telepon: document.getElementById('emp_nomor_telepon').value.trim(),
+      nama_lengkap: document.getElementById('emp_nama_lengkap').value.trim(),
+      nik: document.getElementById('emp_nik').value.trim(),
+      email: document.getElementById('emp_email').value.trim(),
+      alamat_domisili: document.getElementById('emp_alamat_domisili').value.trim(),
+      nama_bank: document.getElementById('emp_nama_bank').value,
+      nomor_rekening: document.getElementById('emp_nomor_rekening').value.trim(),
+      bpjs_kesehatan: document.getElementById('emp_bpjs_kesehatan').checked,
+      keterangan_bpjs_kesehatan: document.getElementById('emp_keterangan_bpjs_kesehatan').value.trim(),
+      bpjs_tenaga_kerja: document.getElementById('emp_bpjs_tenaga_kerja').checked,
+      keterangan_bpjs_tenaga_kerja: document.getElementById('emp_keterangan_bpjs_tenaga_kerja').value.trim(),
+      tempat_lahir: document.getElementById('emp_tempat_lahir').value.trim(),
+      tanggal_lahir: document.getElementById('emp_tanggal_lahir').value,
+      jenis_kelamin: document.getElementById('emp_jenis_kelamin').value,
+      agama: document.getElementById('emp_agama').value,
+      golongan_darah: document.getElementById('emp_golongan_darah').value,
+      pendidikan: document.getElementById('emp_pendidikan').value,
+      jurusan: document.getElementById('emp_jurusan').value.trim()
+    };
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>Simpan Data Pegawai</span>';
+        if (res && res.success) {
+          closeModalPegawai();
+          showToast('Data pegawai berhasil disimpan!', 'success');
+          loadAllData();
+        } else {
+          alert('Gagal menyimpan: ' + ((res && res.message) || 'Error'));
+        }
+      })
+      .apiSavePegawai(data);
+  }
+
+  // ==========================================
+  // FITUR ARSIP & PEMULIHAN PEGAWAI (RESIGN)
+  // ==========================================
+  function openModalArsip(id) {
+    const p = AppState.pegawai.find(item => item.id_pegawai === id);
+    if (!p) return;
+
+    document.getElementById('arsip_id_pegawai').value = id;
+    document.getElementById('arsip_nama_pegawai').innerText = p.nama_lengkap || p.nama_panggilan;
+    document.getElementById('arsip_jabatan_pegawai').innerText = `${p.nama_jabatan || '-'} (${p.nama_perusahaan || '-'})`;
+    
+    // Default tanggal hari ini (YYYY-MM-DD)
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('arsip_tanggal_resign').value = today;
+    document.getElementById('arsip_keterangan').value = '';
+
+    document.getElementById('modalArsip').classList.remove('hidden');
+  }
+
+  function closeModalArsip() {
+    document.getElementById('modalArsip').classList.add('hidden');
+  }
+
+  function handleArchiveSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById('arsip_id_pegawai').value;
+    const tanggalResign = document.getElementById('arsip_tanggal_resign').value;
+    const keterangan = document.getElementById('arsip_keterangan').value.trim();
+    const btn = document.getElementById('btnSubmitArsip');
+
+    btn.disabled = true;
+    btn.innerText = 'Mengarsipkan...';
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        btn.disabled = false;
+        btn.innerText = 'Konfirmasi Arsipkan';
+        if (res && res.success) {
+          closeModalArsip();
+          showToast(res.message, 'success');
+          loadAllData();
+        } else {
+          alert('Gagal mengarsipkan: ' + ((res && res.message) || 'Error'));
+        }
+      })
+      .apiArchivePegawai(id, tanggalResign, keterangan);
+  }
+
+  function restorePegawaiById(id) {
+    const p = AppState.pegawai.find(item => item.id_pegawai === id);
+    const nama = p ? (p.nama_lengkap || p.nama_panggilan) : 'pegawai ini';
+
+    if (!confirm(`Pulihkan status ${nama} dari Arsip/Resign kembali menjadi Pegawai Aktif?`)) return;
+
+    showToast('Memulihkan status pegawai...', 'info');
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res && res.success) {
+          showToast(res.message, 'success');
+          loadAllData();
+        } else {
+          alert('Gagal memulihkan: ' + ((res && res.message) || 'Error'));
+        }
+      })
+      .apiRestorePegawai(id);
+  }
+
+  // ==========================================
+  // VIEW 5: PENGATURAN & PIN
+  // ==========================================
+  function handleChangePin(e) {
+    e.preventDefault();
+    const oldPin = document.getElementById('inputOldPin').value.trim();
+    const newPin = document.getElementById('inputNewPin').value.trim();
+    const btn = document.getElementById('btnSavePin');
+
+    btn.disabled = true;
+    btn.innerText = 'Menyimpan PIN...';
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        btn.disabled = false;
+        btn.innerText = 'Perbarui PIN Admin';
+        if (res && res.success) {
+          showToast(res.message, 'success');
+          document.getElementById('inputOldPin').value = '';
+          document.getElementById('inputNewPin').value = '';
+        } else {
+          alert(res.message || 'Gagal mengubah PIN');
+        }
+      })
+      .apiChangeAdminPin(oldPin, newPin);
+  }
+
+  // ==========================================
+  // TOAST NOTIFICATION UTILITY
+  // ==========================================
+  function showToast(message, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `pointer-events-auto px-4 py-3 rounded-xl shadow-lg text-xs font-semibold flex items-center space-x-2 text-white toast-enter ${
+      type === 'success' ? 'bg-emerald-600' : (type === 'error' ? 'bg-red-600' : 'bg-brand-600')
+    }`;
+
+    toast.innerHTML = `<span>${message}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => toast.classList.add('toast-visible'), 10);
+
+    setTimeout(() => {
+      toast.classList.remove('toast-visible');
+      setTimeout(() => toast.remove(), 300);
+    }, 3500);
+  }
+</script>

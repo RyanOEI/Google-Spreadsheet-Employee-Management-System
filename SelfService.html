@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Formulir Kelengkapan Data Pegawai - <?= pegawai.nama_lengkap || pegawai.nama_panggilan ?></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen pb-16">
+
+  <!-- Top Simple Header (No Admin Nav) -->
+  <header class="bg-brand-900 text-white shadow-md">
+    <div class="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 bg-brand-700 rounded-xl flex items-center justify-center font-bold text-white shadow-sm">
+          HR
+        </div>
+        <div>
+          <h1 class="text-base font-bold leading-tight"><?= appName ?></h1>
+          <p class="text-xs text-brand-200">Formulir Mandiri Pembaruan Biodata Pegawai</p>
+        </div>
+      </div>
+      <div class="text-xs bg-brand-800/80 px-3 py-1 rounded-full border border-brand-700/50 flex items-center space-x-1.5">
+        <svg class="w-3.5 h-3.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+        </svg>
+        <span>Tautan Resmi Pribadi</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="max-w-3xl mx-auto px-4 mt-6">
+    
+    <!-- Greeting Card & Progress Completeness Bar -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+        <div>
+          <span class="text-xs font-semibold uppercase tracking-wider text-brand-600 bg-brand-50 px-2.5 py-1 rounded-full">
+            <?= pegawai.nama_perusahaan ?>
+          </span>
+          <h2 class="text-xl font-bold text-slate-900 mt-2">
+            Halo, <?= pegawai.nama_panggilan || pegawai.nama_lengkap || 'Rekan Pegawai' ?>!
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">
+            Mohon lengkapi atau perbarui data diri Anda di bawah ini untuk keperluan administrasi dan penggajian perusahaan.
+          </p>
+        </div>
+
+        <div class="flex-shrink-0 text-right sm:text-right">
+          <div id="badgeStatus" class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold 
+            <?= pegawai.status_kelengkapan === 'LENGKAP' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700' ?>">
+            <span class="w-2 h-2 rounded-full <?= pegawai.status_kelengkapan === 'LENGKAP' ? 'bg-emerald-500' : 'bg-red-500 animate-pulse' ?>"></span>
+            <span id="badgeStatusText"><?= pegawai.status_kelengkapan === 'LENGKAP' ? 'Data Lengkap (100%)' : 'Belum Lengkap' ?></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Dynamic Progress Bar -->
+      <div class="mt-4">
+        <div class="flex justify-between items-center text-xs mb-1.5">
+          <span class="font-medium text-slate-600">Tingkat Kelengkapan Data Pokok</span>
+          <span id="progressText" class="font-bold text-brand-600"><?= pegawai.persentase_kelengkapan || 0 ?>%</span>
+        </div>
+        <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+          <div id="progressBar" class="h-full rounded-full transition-all duration-300 <?= (pegawai.persentase_kelengkapan || 0) === 100 ? 'bg-emerald-500' : 'bg-brand-600' ?>" 
+               style="width: <?= pegawai.persentase_kelengkapan || 0 ?>%;"></div>
+        </div>
+        <div id="missingNotice" class="text-xs text-red-500 mt-2 <?= pegawai.status_kelengkapan === 'LENGKAP' ? 'hidden' : '' ?>">
+          ⚠️ Kolom pokok yang belum terisi: <span id="missingText" class="font-semibold"><?= pegawai.kolom_belum_lengkap || 'Semua terisi' ?></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alert Success Notification (Hidden initially) -->
+    <div id="successAlert" class="hidden mb-6 bg-emerald-50 border border-emerald-200 text-emerald-800 p-5 rounded-2xl shadow-sm flex items-start space-x-3">
+      <svg class="w-6 h-6 text-emerald-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <div>
+        <h4 class="font-bold text-sm">Data Berhasil Diperbarui!</h4>
+        <p class="text-xs mt-0.5 text-emerald-700">Terima kasih, biodata Anda telah tersimpan secara realtime di sistem Google Spreadsheet HR.</p>
+      </div>
+    </div>
+
+    <!-- The Form -->
+    <form id="selfServiceForm" onsubmit="handleSubmitSelfService(event)" class="space-y-6">
+
+      <!-- SECTION 1: DATA KANTOR / ORGANISASI (READ-ONLY) -->
+      <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div class="flex items-center space-x-2 text-slate-900 font-bold text-sm">
+            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+            </svg>
+            <span>Informasi Kantor & Hubungan Kerja</span>
+          </div>
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded">Terkunci (Read-Only)</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">Perusahaan</label>
+            <div class="bg-slate-50 border border-slate-200 text-slate-700 font-semibold px-3 py-2.5 rounded-xl">
+              <?= pegawai.nama_perusahaan || '-' ?>
+            </div>
+          </div>
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">Jabatan / Posisi</label>
+            <div class="bg-slate-50 border border-slate-200 text-slate-700 font-semibold px-3 py-2.5 rounded-xl">
+              <?= pegawai.nama_jabatan || '-' ?>
+            </div>
+          </div>
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">Status Kepegawaian</label>
+            <div class="bg-slate-50 border border-slate-200 text-slate-700 font-semibold px-3 py-2.5 rounded-xl">
+              <?= pegawai.status_pegawai || 'Tetap' ?>
+            </div>
+          </div>
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">Status Bekerja</label>
+            <div class="bg-slate-50 border border-slate-200 text-slate-700 font-semibold px-3 py-2.5 rounded-xl">
+              <?= pegawai.status_bekerja || 'Aktif' ?>
+            </div>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-400 italic">Apabila terdapat ketidaksesuaian data penempatan kantor, mohon hubungi pihak HR/Personalia.</p>
+      </div>
+
+      <!-- SECTION 2: BIODATA PRIBADI (DAPAT DIISI/DIUBAH) -->
+      <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4">
+        <div class="flex items-center space-x-2 text-slate-900 font-bold text-sm pb-3 border-b border-slate-100">
+          <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+          </svg>
+          <span>Biodata Pribadi Pegawai</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">NIK (16 Digit) * <span class="text-red-500 font-bold">(Wajib)</span></label>
+            <input type="text" id="f_nik" maxlength="16" value="<?= pegawai.nik || '' ?>" required oninput="calcClientCompleteness()"
+                   placeholder="16 Digit NIK KTP" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Nama Lengkap (Sesuai KTP) * <span class="text-red-500 font-bold">(Wajib)</span></label>
+            <input type="text" id="f_nama_lengkap" value="<?= pegawai.nama_lengkap || '' ?>" required oninput="calcClientCompleteness()"
+                   placeholder="Nama lengkap resmi sesuai KTP" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Nama Panggilan * <span class="text-red-500 font-bold">(Wajib)</span></label>
+            <input type="text" id="f_nama_panggilan" value="<?= pegawai.nama_panggilan || '' ?>" required
+                   placeholder="Nama sapaan" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Nomor WhatsApp / HP * <span class="text-red-500 font-bold">(Wajib)</span></label>
+            <input type="text" id="f_nomor_telepon" value="<?= pegawai.nomor_telepon || '' ?>" required oninput="calcClientCompleteness()"
+                   placeholder="08xxxxxxxxxx" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Email Pribadi (Opsional)</label>
+            <input type="email" id="f_email" value="<?= pegawai.email || '' ?>"
+                   placeholder="nama@email.com" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Alamat Domisili Tempat Tinggal * <span class="text-red-500 font-bold">(Wajib)</span></label>
+          <textarea id="f_alamat_domisili" rows="2" required oninput="calcClientCompleteness()"
+                    placeholder="Alamat lengkap tempat tinggal saat ini..." 
+                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"><?= pegawai.alamat_domisili || '' ?></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Tempat Lahir</label>
+            <input type="text" id="f_tempat_lahir" value="<?= pegawai.tempat_lahir || '' ?>" placeholder="Kota" 
+                   class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Tanggal Lahir</label>
+            <input type="date" id="f_tanggal_lahir" value="<?= pegawai.tanggal_lahir || '' ?>" 
+                   class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Jenis Kelamin</label>
+            <select id="f_jenis_kelamin" class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg outline-none bg-white">
+              <option value="" <?= !pegawai.jenis_kelamin ? 'selected' : '' ?>>-- Pilih Jenis Kelamin --</option>
+              <option value="Laki-laki" <?= pegawai.jenis_kelamin === 'Laki-laki' ? 'selected' : '' ?>>Laki-laki</option>
+              <option value="Perempuan" <?= pegawai.jenis_kelamin === 'Perempuan' ? 'selected' : '' ?>>Perempuan</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Agama</label>
+            <select id="f_agama" class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg outline-none bg-white">
+              <option value="" <?= !pegawai.agama ? 'selected' : '' ?>>-- Pilih Agama --</option>
+              <option value="Islam" <?= pegawai.agama === 'Islam' ? 'selected' : '' ?>>Islam</option>
+              <option value="Kristen" <?= pegawai.agama === 'Kristen' ? 'selected' : '' ?>>Kristen</option>
+              <option value="Katolik" <?= pegawai.agama === 'Katolik' ? 'selected' : '' ?>>Katolik</option>
+              <option value="Hindu" <?= pegawai.agama === 'Hindu' ? 'selected' : '' ?>>Hindu</option>
+              <option value="Buddha" <?= pegawai.agama === 'Buddha' ? 'selected' : '' ?>>Buddha</option>
+              <option value="Konghucu" <?= pegawai.agama === 'Konghucu' ? 'selected' : '' ?>>Konghucu</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Golongan Darah</label>
+            <select id="f_golongan_darah" class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg outline-none bg-white">
+              <option value="" <?= !pegawai.golongan_darah ? 'selected' : '' ?>>Tidak Tahu / Belum Cek</option>
+              <option value="A" <?= pegawai.golongan_darah === 'A' ? 'selected' : '' ?>>A</option>
+              <option value="B" <?= pegawai.golongan_darah === 'B' ? 'selected' : '' ?>>B</option>
+              <option value="AB" <?= pegawai.golongan_darah === 'AB' ? 'selected' : '' ?>>AB</option>
+              <option value="O" <?= pegawai.golongan_darah === 'O' ? 'selected' : '' ?>>O</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Pendidikan Terakhir</label>
+            <select id="f_pendidikan" class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg outline-none bg-white">
+              <option value="" <?= !pegawai.pendidikan ? 'selected' : '' ?>>Pilih Pendidikan</option>
+              <option value="SMA/SMK" <?= pegawai.pendidikan === 'SMA/SMK' ? 'selected' : '' ?>>SMA/SMK</option>
+              <option value="D3" <?= pegawai.pendidikan === 'D3' ? 'selected' : '' ?>>D3</option>
+              <option value="D4/S1" <?= (pegawai.pendidikan === 'D4/S1' || pegawai.pendidikan === 'S1') ? 'selected' : '' ?>>D4 / S1</option>
+              <option value="S2" <?= pegawai.pendidikan === 'S2' ? 'selected' : '' ?>>S2</option>
+              <option value="S3" <?= pegawai.pendidikan === 'S3' ? 'selected' : '' ?>>S3</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Jurusan</label>
+            <input type="text" id="f_jurusan" value="<?= pegawai.jurusan || '' ?>" placeholder="Jurusan studi" 
+                   class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg outline-none">
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 3: INFORMASI BANK -->
+      <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4">
+        <div class="flex items-center space-x-2 text-slate-900 font-bold text-sm pb-3 border-b border-slate-100">
+          <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
+          </svg>
+          <span>Informasi Rekening Bank</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Nama Bank</label>
+            <select id="f_nama_bank" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none bg-white">
+              <option value="">-- Pilih Bank --</option>
+              <option value="BRI" <?= pegawai.nama_bank === 'BRI' ? 'selected' : '' ?>>BRI</option>
+              <option value="BNI" <?= pegawai.nama_bank === 'BNI' ? 'selected' : '' ?>>BNI</option>
+              <option value="BTN" <?= pegawai.nama_bank === 'BTN' ? 'selected' : '' ?>>BTN</option>
+              <option value="Mandiri" <?= pegawai.nama_bank === 'Mandiri' ? 'selected' : '' ?>>Mandiri</option>
+              <option value="Syariah" <?= pegawai.nama_bank === 'Syariah' ? 'selected' : '' ?>>Syariah (BSI / Bank Syariah)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Nomor Rekening</label>
+            <input type="text" id="f_nomor_rekening" value="<?= pegawai.nomor_rekening || '' ?>"
+                   placeholder="Contoh: 1370012345678" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <div class="flex items-center justify-between pt-2">
+        <p class="text-xs text-slate-400">Data Anda dilindungi dan hanya digunakan untuk keperluan internal perusahaan.</p>
+        <button type="submit" id="btnSubmitSelf" class="bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm px-6 py-3 rounded-xl transition shadow-md hover:shadow-lg flex items-center space-x-2">
+          <span>Simpan Pembaruan Data</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        </button>
+      </div>
+
+    </form>
+
+    <footer class="mt-12 text-center text-xs text-slate-400">
+      <p>&copy; <?= new Date().getFullYear() ?> <?= appName ?> &bull; Data Terisolasi & Terenkripsi</p>
+    </footer>
+
+  </div>
+
+  <script>
+    const TOKEN = <?= JSON.stringify(token) ?>;
+    let pegawaiData = <?= JSON.stringify(pegawai) ?>;
+    const REQUIRED_FIELDS = <?= JSON.stringify(requiredFields || [
+      { key: 'nik', label: 'NIK' },
+      { key: 'nama_lengkap', label: 'Nama Lengkap' },
+      { key: 'nomor_telepon', label: 'Nomor Telepon' },
+      { key: 'alamat_domisili', label: 'Alamat Domisili' },
+      { key: 'id_perusahaan', label: 'Perusahaan' },
+      { key: 'id_jabatan', label: 'Jabatan' }
+    ]) ?>;
+
+    const DOM_FIELD_MAP = {
+      nik: 'f_nik',
+      nama_lengkap: 'f_nama_lengkap',
+      nomor_telepon: 'f_nomor_telepon',
+      alamat_domisili: 'f_alamat_domisili'
+    };
+
+    function updateCompletenessUI(pct, status, missingList) {
+      document.getElementById('progressText').innerText = pct + '%';
+      const bar = document.getElementById('progressBar');
+      bar.style.width = pct + '%';
+      
+      const badge = document.getElementById('badgeStatus');
+      const badgeText = document.getElementById('badgeStatusText');
+      const notice = document.getElementById('missingNotice');
+      const missingText = document.getElementById('missingText');
+
+      if (pct === 100 || status === 'LENGKAP') {
+        bar.className = 'h-full rounded-full transition-all duration-300 bg-emerald-500';
+        badge.className = 'inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700';
+        badgeText.innerText = 'Data Lengkap (100%)';
+        notice.classList.add('hidden');
+      } else {
+        bar.className = 'h-full rounded-full transition-all duration-300 bg-brand-600';
+        badge.className = 'inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700';
+        badgeText.innerText = 'Belum Lengkap (' + pct + '%)';
+        notice.classList.remove('hidden');
+        missingText.innerText = (missingList && missingList.length > 0) ? missingList.join(', ') : 'Ada data pokok yang belum terisi';
+      }
+    }
+
+    function calcClientCompleteness() {
+      let filled = 0;
+      const missing = [];
+
+      REQUIRED_FIELDS.forEach(field => {
+        let val = '';
+        if (DOM_FIELD_MAP[field.key]) {
+          const el = document.getElementById(DOM_FIELD_MAP[field.key]);
+          val = el ? el.value.trim() : '';
+        } else {
+          // Field kantor / penempatan (read-only pada form mandiri)
+          val = (pegawaiData && (pegawaiData[field.key] || (field.key === 'id_perusahaan' && pegawaiData.nama_perusahaan) || (field.key === 'id_jabatan' && pegawaiData.nama_jabatan))) ? String(pegawaiData[field.key] || '').trim() : '';
+        }
+
+        if (val !== '') {
+          filled++;
+        } else {
+          missing.push(field.label);
+        }
+      });
+
+      const total = REQUIRED_FIELDS.length;
+      const pct = total > 0 ? Math.round((filled / total) * 100) : 100;
+      const status = pct === 100 ? 'LENGKAP' : 'BELUM_LENGKAP';
+
+      updateCompletenessUI(pct, status, missing);
+    }
+
+    function handleSubmitSelfService(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btnSubmitSelf');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `
+        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>Menyimpan...</span>
+      `;
+
+      const data = {
+        nik: document.getElementById('f_nik').value.trim(),
+        nama_lengkap: document.getElementById('f_nama_lengkap').value.trim(),
+        nama_panggilan: document.getElementById('f_nama_panggilan').value.trim(),
+        nomor_telepon: document.getElementById('f_nomor_telepon').value.trim(),
+        email: document.getElementById('f_email').value.trim(),
+        alamat_domisili: document.getElementById('f_alamat_domisili').value.trim(),
+        tempat_lahir: document.getElementById('f_tempat_lahir').value.trim(),
+        tanggal_lahir: document.getElementById('f_tanggal_lahir').value,
+        jenis_kelamin: document.getElementById('f_jenis_kelamin').value,
+        agama: document.getElementById('f_agama').value,
+        golongan_darah: document.getElementById('f_golongan_darah').value,
+        pendidikan: document.getElementById('f_pendidikan').value,
+        jurusan: document.getElementById('f_jurusan').value.trim(),
+        nama_bank: document.getElementById('f_nama_bank').value,
+        nomor_rekening: document.getElementById('f_nomor_rekening').value.trim()
+      };
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+          if (response && response.success) {
+            document.getElementById('successAlert').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            Object.assign(pegawaiData, data);
+            if (response.audit) {
+              updateCompletenessUI(response.audit.percentage, response.audit.status, response.audit.missingList);
+            } else {
+              calcClientCompleteness();
+            }
+          } else {
+            alert('Gagal menyimpan data: ' + ((response && response.message) || 'Terjadi kesalahan'));
+          }
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+          alert('Terjadi kesalahan jaringan: ' + err.toString());
+        })
+        .apiSubmitSelfService(TOKEN, data);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      calcClientCompleteness();
+    });
+  </script>
+</body>
+</html>
