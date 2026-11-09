@@ -23,7 +23,10 @@ function initDatabase() {
  */
 function doGet(e) {
   try {
-    const token = e && e.parameter && e.parameter.token ? String(e.parameter.token).trim() : null;
+    let token = e && e.parameter && e.parameter.token ? String(e.parameter.token).trim() : null;
+    if (token) {
+      token = token.replace(/^["']+|["']+$/g, '').trim();
+    }
     const appName = DB.getSetting('APP_NAME', 'Sistem Manajemen Pegawai');
 
     // JIKA ADA PARAMETER TOKEN: MODE PEGAWAI (SELF-SERVICE)
@@ -314,7 +317,12 @@ function apiSendReminderEmail(empId) {
 // --- API SELF-SERVICE (DIPANGGIL DARI FORM PEGAWAI) ---
 function apiSubmitSelfService(token, formData) {
   try {
-    if (!token) throw new Error('Token tidak valid.');
+    if (!token && formData && (formData.edit_token || formData.token)) {
+      token = formData.edit_token || formData.token;
+    }
+    if (!token && !(formData && formData.id_pegawai)) {
+      throw new Error('Token tidak valid.');
+    }
     const result = DB.updatePegawaiByToken(token, formData);
     return result;
   } catch (e) {

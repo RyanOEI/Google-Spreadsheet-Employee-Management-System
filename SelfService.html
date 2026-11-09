@@ -111,6 +111,10 @@
     <!-- The Form -->
     <form id="selfServiceForm" onsubmit="handleSubmitSelfService(event)" class="space-y-6">
 
+      <!-- Hidden Identity Inputs for Token & ID -->
+      <input type="hidden" id="f_token" value="<?= token || (pegawai && pegawai.edit_token) || '' ?>">
+      <input type="hidden" id="f_id_pegawai" value="<?= (pegawai && pegawai.id_pegawai) || '' ?>">
+
       <!-- SECTION 1: DATA KANTOR / ORGANISASI (READ-ONLY) -->
       <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4">
         <div class="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -309,9 +313,9 @@
   </div>
 
   <script>
-    const TOKEN = <?= JSON.stringify(token) ?>;
-    let pegawaiData = <?= JSON.stringify(pegawai) ?>;
-    const REQUIRED_FIELDS = <?= JSON.stringify(requiredFields || [
+    const TOKEN = <?!= JSON.stringify(token || (pegawai && pegawai.edit_token) || '') ?>;
+    let pegawaiData = <?!= JSON.stringify(pegawai || {}) ?>;
+    const REQUIRED_FIELDS = <?!= JSON.stringify(requiredFields || [
       { key: 'nik', label: 'NIK' },
       { key: 'nama_lengkap', label: 'Nama Lengkap' },
       { key: 'nomor_telepon', label: 'Nomor Telepon' },
@@ -392,7 +396,13 @@
         <span>Menyimpan...</span>
       `;
 
+      const tokenEl = document.getElementById('f_token');
+      const activeToken = String((tokenEl && tokenEl.value) ? tokenEl.value : (TOKEN || (pegawaiData && pegawaiData.edit_token) || '')).trim().replace(/^["']+|["']+$/g, '');
+      const idPegawai = String((document.getElementById('f_id_pegawai') ? document.getElementById('f_id_pegawai').value : (pegawaiData && pegawaiData.id_pegawai) || '')).trim();
+
       const data = {
+        id_pegawai: idPegawai,
+        edit_token: activeToken,
         nik: document.getElementById('f_nik').value.trim(),
         nama_lengkap: document.getElementById('f_nama_lengkap').value.trim(),
         nama_panggilan: document.getElementById('f_nama_panggilan').value.trim(),
@@ -432,7 +442,7 @@
           btn.innerHTML = originalText;
           alert('Terjadi kesalahan jaringan: ' + err.toString());
         })
-        .apiSubmitSelfService(TOKEN, data);
+        .apiSubmitSelfService(activeToken, data);
     }
 
     document.addEventListener('DOMContentLoaded', function() {

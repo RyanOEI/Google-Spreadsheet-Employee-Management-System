@@ -269,8 +269,14 @@ const DB = {
 
   getPegawaiByToken: function(token) {
     if (!token) return null;
+    const cleanToken = String(token).trim().replace(/^["']+|["']+$/g, '').trim().toLowerCase();
+    if (!cleanToken) return null;
+
     const list = this.getPegawaiList();
-    return list.find(p => String(p.edit_token).trim() === String(token).trim()) || null;
+    return list.find(p => {
+      const pToken = String(p.edit_token || p['edit token'] || p.token || '').trim().replace(/^["']+|["']+$/g, '').trim().toLowerCase();
+      return pToken === cleanToken;
+    }) || null;
   },
 
   savePegawai: function(data) {
@@ -372,9 +378,37 @@ const DB = {
    */
   updatePegawaiByToken: function(token, inputData) {
     const sheet = this.getSheet(this.SHEET_NAMES.PEGAWAI);
-    const headers = this.getPegawaiHeaders();
+    const dataRange = sheet.getDataRange().getValues();
+    if (dataRange.length <= 1) {
+      throw new Error('Data sheet pegawai kosong.');
+    }
+    const sheetHeaders = dataRange[0].map(h => String(h).trim().toLowerCase());
     const rows = this.sheetToObjects(sheet);
-    const target = rows.find(r => String(r.edit_token).trim() === String(token).trim());
+
+    // 1. Normalisasi token (bersihkan kutip, whitespace, case-insensitive)
+    let cleanToken = String(token || '').trim().replace(/^["']+|["']+$/g, '').trim();
+    if (!cleanToken && inputData && (inputData.edit_token || inputData.token)) {
+      cleanToken = String(inputData.edit_token || inputData.token).trim().replace(/^["']+|["']+$/g, '').trim();
+    }
+
+    if (!cleanToken && !(inputData && inputData.id_pegawai)) {
+      throw new Error('Token akses tidak valid atau kosong.');
+    }
+
+    // 2. Cari target pegawai berdasarkan edit_token
+    let target = null;
+    if (cleanToken) {
+      target = rows.find(r => {
+        const rowToken = String(r.edit_token || r['edit token'] || r.token || '').trim().replace(/^["']+|["']+$/g, '').trim();
+        return rowToken.toLowerCase() === cleanToken.toLowerCase();
+      });
+    }
+
+    // 3. Fallback: Cari berdasarkan id_pegawai jika dikirimkan form mandiri
+    if (!target && inputData && inputData.id_pegawai) {
+      const cleanId = String(inputData.id_pegawai).trim().toLowerCase();
+      target = rows.find(r => String(r.id_pegawai || '').trim().toLowerCase() === cleanId);
+    }
 
     if (!target) {
       throw new Error('Token akses tidak valid atau tidak ditemukan.');
@@ -426,8 +460,9 @@ const DB = {
     merged.kolom_belum_lengkap = audit.missingFieldsText;
     merged.last_self_updated_at = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Jakarta', 'yyyy-MM-dd HH:mm:ss');
 
-    const rowValues = headers.map(h => merged[h] !== undefined ? merged[h] : '');
-    sheet.getRange(target._rowIndex, 1, 1, headers.length).setValues([rowValues]);
+    // Tulis kembali ke baris yang bersangkutan sesuai urutan kolom riil pada sheet
+    const rowValues = sheetHeaders.map(h => merged[h] !== undefined ? merged[h] : '');
+    sheet.getRange(target._rowIndex, 1, 1, sheetHeaders.length).setValues([rowValues]);
 
     return {
       success: true,
