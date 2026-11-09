@@ -591,15 +591,6 @@ const DB = {
       .setFontWeight('bold');
     sPegawai.setFrozenRows(1);
 
-    // Pasang Checkbox Data Validation untuk kolom bpjs_kesehatan, bpjs_tenaga_kerja, dan is_archived
-    const bpjsKesCol = empHeaders.indexOf('bpjs_kesehatan') + 1;
-    const bpjsTkCol = empHeaders.indexOf('bpjs_tenaga_kerja') + 1;
-    const isArchivedCol = empHeaders.indexOf('is_archived') + 1;
-    const checkboxRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
-    sPegawai.getRange(2, bpjsKesCol, 500, 1).setDataValidation(checkboxRule);
-    sPegawai.getRange(2, bpjsTkCol, 500, 1).setDataValidation(checkboxRule);
-    sPegawai.getRange(2, isArchivedCol, 500, 1).setDataValidation(checkboxRule);
-
     const token1 = CompletenessService.generateToken();
     const token2 = CompletenessService.generateToken();
     const token3 = CompletenessService.generateToken();
