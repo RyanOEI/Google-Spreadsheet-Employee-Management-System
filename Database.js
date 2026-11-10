@@ -791,9 +791,9 @@ const DB = {
       '',
       false,
       token2,
-      'BELUM_LENGKAP',
-      83,
-      'Alamat Domisili',
+      'LENGKAP',
+      100,
+      '',
       '',
       '2026-02-01 10:30:00'
     ]);
@@ -831,7 +831,7 @@ const DB = {
       token3,
       'BELUM_LENGKAP',
       50,
-      'NIK, Nama Lengkap, Alamat Domisili',
+      'NIK, Nama Lengkap, Rekening Bank',
       '',
       '2026-02-02 09:15:00'
     ]);

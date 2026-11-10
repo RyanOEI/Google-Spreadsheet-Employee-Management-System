@@ -6,24 +6,24 @@
 
 const CompletenessService = {
   /**
-   * Kolom-kolom pokok yang WAJIB terisi agar data pegawai dianggap LENGKAP:
+   * Kolom-kolom yang diperhitungkan dalam kelengkapan data pegawai (100%):
    * 1. NIK
    * 2. Nama Lengkap
    * 3. Nomor Telepon
-   * 4. Alamat Domisili
-   * 5. ID Perusahaan
-   * 6. ID Jabatan
+   * 4. ID Perusahaan
+   * 5. ID Jabatan
+   * 6. Informasi Rekening Bank (Nama Bank & Nomor Rekening) - Opsional diisi, melengkapi ke 100%
    *
-   * Catatan: BPJS Kesehatan, BPJS Tenaga Kerja, serta Rekening Bank bersifat catatan
-   * administratif/payroll dan tidak menghalangi kelengkapan data pokok pegawai (100%).
+   * Catatan: Alamat Domisili, BPJS Kesehatan, dan BPJS Tenaga Kerja bersifat opsional
+   * dan tidak menghalangi kelengkapan data pokok pegawai.
    */
   REQUIRED_FIELDS: [
     { key: 'nik', label: 'NIK' },
     { key: 'nama_lengkap', label: 'Nama Lengkap' },
     { key: 'nomor_telepon', label: 'Nomor Telepon' },
-    { key: 'alamat_domisili', label: 'Alamat Domisili' },
     { key: 'id_perusahaan', label: 'Perusahaan' },
-    { key: 'id_jabatan', label: 'Jabatan' }
+    { key: 'id_jabatan', label: 'Jabatan' },
+    { key: 'rekening_bank', label: 'Rekening Bank', isBank: true }
   ],
 
   /**
@@ -46,6 +46,20 @@ const CompletenessService = {
     const totalFields = this.REQUIRED_FIELDS.length;
 
     this.REQUIRED_FIELDS.forEach(field => {
+      if (field.isBank) {
+        const hasBank = employee.nama_bank !== null && employee.nama_bank !== undefined && String(employee.nama_bank).trim() !== '';
+        const hasRek = employee.nomor_rekening !== null && employee.nomor_rekening !== undefined && String(employee.nomor_rekening).trim() !== '';
+        if (hasBank && hasRek) {
+          filledCount++;
+        } else if (hasBank || hasRek) {
+          filledCount += 0.5;
+          missingList.push(hasBank ? 'Nomor Rekening' : 'Nama Bank');
+        } else {
+          missingList.push(field.label);
+        }
+        return;
+      }
+
       const val = employee[field.key];
 
       if (field.isCheckbox) {

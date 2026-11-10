@@ -197,9 +197,9 @@
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Alamat Domisili Tempat Tinggal * <span class="text-red-500 font-bold">(Wajib)</span></label>
-          <textarea id="f_alamat_domisili" rows="2" required oninput="calcClientCompleteness()"
-                    placeholder="Alamat lengkap tempat tinggal saat ini..." 
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Alamat Domisili Tempat Tinggal <span class="text-slate-400 font-normal">(Opsional)</span></label>
+          <textarea id="f_alamat_domisili" rows="2"
+                    placeholder="Alamat tempat tinggal saat ini..." 
                     class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"><?= pegawai.alamat_domisili || '' ?></textarea>
         </div>
 
@@ -273,12 +273,13 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
           </svg>
           <span>Informasi Rekening Bank</span>
+          <span class="text-slate-400 font-normal text-xs">(Opsional diisi &bull; melengkapi data 100%)</span>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1">Nama Bank</label>
-            <select id="f_nama_bank" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none bg-white">
+            <select id="f_nama_bank" onchange="calcClientCompleteness()" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none bg-white">
               <option value="">-- Pilih Bank --</option>
               <option value="BRI" <?= pegawai.nama_bank === 'BRI' ? 'selected' : '' ?>>BRI</option>
               <option value="BNI" <?= pegawai.nama_bank === 'BNI' ? 'selected' : '' ?>>BNI</option>
@@ -289,7 +290,7 @@
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1">Nomor Rekening</label>
-            <input type="text" id="f_nomor_rekening" value="<?= pegawai.nomor_rekening || '' ?>"
+            <input type="text" id="f_nomor_rekening" value="<?= pegawai.nomor_rekening || '' ?>" oninput="calcClientCompleteness()"
                    placeholder="Contoh: 1370012345678" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
         </div>
@@ -319,16 +320,15 @@
       { key: 'nik', label: 'NIK' },
       { key: 'nama_lengkap', label: 'Nama Lengkap' },
       { key: 'nomor_telepon', label: 'Nomor Telepon' },
-      { key: 'alamat_domisili', label: 'Alamat Domisili' },
       { key: 'id_perusahaan', label: 'Perusahaan' },
-      { key: 'id_jabatan', label: 'Jabatan' }
+      { key: 'id_jabatan', label: 'Jabatan' },
+      { key: 'rekening_bank', label: 'Rekening Bank', isBank: true }
     ]) ?>;
 
     const DOM_FIELD_MAP = {
       nik: 'f_nik',
       nama_lengkap: 'f_nama_lengkap',
-      nomor_telepon: 'f_nomor_telepon',
-      alamat_domisili: 'f_alamat_domisili'
+      nomor_telepon: 'f_nomor_telepon'
     };
 
     function updateCompletenessUI(pct, status, missingList) {
@@ -360,6 +360,22 @@
       const missing = [];
 
       REQUIRED_FIELDS.forEach(field => {
+        if (field.isBank) {
+          const bankEl = document.getElementById('f_nama_bank');
+          const rekEl = document.getElementById('f_nomor_rekening');
+          const hasBank = bankEl && bankEl.value.trim() !== '';
+          const hasRek = rekEl && rekEl.value.trim() !== '';
+          if (hasBank && hasRek) {
+            filled++;
+          } else if (hasBank || hasRek) {
+            filled += 0.5;
+            missing.push(hasBank ? 'Nomor Rekening' : 'Nama Bank');
+          } else {
+            missing.push(field.label);
+          }
+          return;
+        }
+
         let val = '';
         if (DOM_FIELD_MAP[field.key]) {
           const el = document.getElementById(DOM_FIELD_MAP[field.key]);

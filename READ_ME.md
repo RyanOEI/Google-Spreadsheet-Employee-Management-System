@@ -102,14 +102,15 @@ Agar persentase antara halaman Admin dan formulir mandiri pegawai **100% konsist
 | 1 | **NIK** | 16 digit nomor induk kependudukan KTP | ~16.67% |
 | 2 | **Nama Lengkap** | Nama resmi pegawai sesuai KTP | ~16.67% |
 | 3 | **Nomor Telepon / WA** | Nomor seluler yang aktif | ~16.67% |
-| 4 | **Alamat Domisili** | Alamat tempat tinggal saat ini | ~16.67% |
-| 5 | **Perusahaan** | Unit penempatan kerja (oleh Admin) | ~16.67% |
-| 6 | **Jabatan** | Posisi pekerjaan (oleh Admin) | ~16.67% |
+| 4 | **Perusahaan** | Unit penempatan kerja (oleh Admin) | ~16.67% |
+| 5 | **Jabatan** | Posisi pekerjaan (oleh Admin) | ~16.67% |
+| 6 | **Rekening Bank** | Nama Bank & Nomor Rekening (Opsional diisi, melengkapi ke 100%) | ~16.67% |
 
 > **Catatan:**
 > - Saat Admin melakukan *Quick Onboard* (isi No Telp, Perusahaan, & Jabatan), kelengkapan awal adalah **50% (3/6)**.
-> - Setelah pegawai melengkapi NIK, Nama Lengkap, dan Alamat Domisili, status otomatis menjadi **100% (LENGKAP)**.
-> - Kolom BPJS Kesehatan, BPJS Ketenagakerjaan, dan Rekening Bank dicatat sebagai data administratif/payroll dan tidak menghambat pegawai mencapai status 100%.
+> - Setelah pegawai melengkapi NIK, Nama Lengkap, dan Rekening Bank, status otomatis menjadi **100% (LENGKAP)**.
+> - Kolom Informasi Bank bersifat **opsional untuk diisi** (tidak memblokir pengiriman formulir jika belum punya rekening). Jika diisi sebagian (hanya bank atau rekening), dihitung proporsional 0.5 poin (~8%).
+> - Kolom Alamat Domisili dan BPJS bersifat opsional dan tidak mengurangi persentase kelengkapan data.
 
 ---
 
